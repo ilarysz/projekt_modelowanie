@@ -34,7 +34,7 @@ HORYZONT = 30  # chyba nie będzie potrzebny
 RANDOM_SEED = 42
 WSP_ZWROT = 0.10
 
-#parametry powiązane z churn
+# parametry powiązane z churn
 WSP_UTR_PTN = 0.5  # strata ok. połowy CLV w danym horyzoncie
 PRZ_LICZBA_WIZYT_ROK = 36
 HORYZONT = 1
@@ -49,10 +49,11 @@ numer_w_kolejce = 0
 
 liczba_klientow = round(random.normalvariate(SR_LICZBA_KLIENTOW, ODCH_LICZBA_KLIENTOW))
 
-klient_wartosci = pd.DataFrame(columns=['id_klienta', 'oczekiwanie', 'wartosc_zakupow', 'zwrot', 'czas_obslugi', 'capacity',
-                                "utracony_potencjal"])
+klient_wartosci = pd.DataFrame(
+    columns=['id_klienta', 'capacity', 'oczekiwanie', 'wartosc_zakupow', 'zwrot', 'czas_obslugi',
+             "utracony_potencjal"], dtype=np.float64)
 
-zrodlo_wartosci = pd.DataFrame(columns=['start_czas', "numer_w_kolejce"])
+zrodlo_wartosci = pd.DataFrame(columns=['start_czas', "numer_w_kolejce"], dtype=np.float64)
 
 
 def zrodlo(env, liczba_klientow, INTERWAL_SPOKOJ, INTERWAL_SZCZYT, kasa, klienci_obsluzeni):
@@ -72,7 +73,7 @@ def zrodlo(env, liczba_klientow, INTERWAL_SPOKOJ, INTERWAL_SZCZYT, kasa, klienci
         yield env.timeout(t)
 
         zrodlo_wartosci = zrodlo_wartosci.append({"start_czas": env.now, "numer_w_kolejce": numer_w_kolejce},
-                                       ignore_index = True)
+                                                 ignore_index=True)
 
 
 def klient(id_klienta, env, WARTOSC_ZAKUPOW_SR, WARTOSC_ZAKUPOW_ODCH,
@@ -90,7 +91,8 @@ def klient(id_klienta, env, WARTOSC_ZAKUPOW_SR, WARTOSC_ZAKUPOW_ODCH,
         prwd_churn = scipy.stats.weibull_min.cdf(oczekiwanie, c=K, scale=LAMBDA)
         churn = np.random.binomial(n=1, p=prwd_churn)
         if churn == 1:
-            print('%7.4f %s: Klient obniży lojalność wobec marki. Oczekiwana utrata przychodu: %6.0f' % (env.now, id_klienta, UTRACONY_POTENCJAL))
+            print('%7.4f %s: Klient obniży lojalność wobec marki. Oczekiwana utrata przychodu: %6.0f' % (
+            env.now, id_klienta, UTRACONY_POTENCJAL))
 
         wartosc_zakupow = random.normalvariate(WARTOSC_ZAKUPOW_SR, WARTOSC_ZAKUPOW_ODCH)
         print(('%7.4f %s zrobił zakupy na kwotę: %.1f' % (env.now, id_klienta, wartosc_zakupow)))
@@ -114,36 +116,61 @@ def klient(id_klienta, env, WARTOSC_ZAKUPOW_SR, WARTOSC_ZAKUPOW_ODCH,
                                                     env.now - start_czekania))
 
         klient_wartosci = klient_wartosci.append({'id_klienta': id_klienta,
-                                  "oczekiwanie": oczekiwanie,
-                                  "wartosc_zakupow": wartosc_zakupow,
-                                  "zwrot": zwrot,
-                                  "czas_obslugi": czas_obslugi,
-                                  "capacity": np.NaN,
-                                  "utracony_potencjal": churn*UTRACONY_POTENCJAL}, ignore_index=True
-                                 )
-
+                                                  "oczekiwanie": oczekiwanie,
+                                                  "wartosc_zakupow": wartosc_zakupow,
+                                                  "zwrot": zwrot,
+                                                  "czas_obslugi": czas_obslugi,
+                                                  "capacity": np.NaN,
+                                                  "utracony_potencjal": churn * UTRACONY_POTENCJAL}, ignore_index=True
+                                                 )
 
 
 print('Symulacja kolejki')
 random.seed(RANDOM_SEED)
 env = simpy.Environment()
+ultimate_result = pd.DataFrame(columns=['id_klienta', 'oczekiwanie', 'wartosc_zakupow', 
+                                        'zwrot', 'czas_obslugi', 'utracony_potencjal'])
+for i in range(10):
+    for n in range(1, 11, 1):
+        # Uruchomienie symulacji
+        kasa = simpy.Resource(env, capacity=n)
+        env.process(zrodlo(env, liczba_klientow, INTERWAL_SPOKOJ, INTERWAL_SZCZYT, kasa, klienci_obsluzeni))
+        env.run()
+        klient_wartosci['capacity'] = klient_wartosci['capacity'].fillna(n)
 
-for n in range(1,10):
-    kasa = simpy.Resource(env, capacity=n)
-    env.process(zrodlo(env, liczba_klientow, INTERWAL_SPOKOJ, INTERWAL_SZCZYT, kasa, klienci_obsluzeni))
-    env.run()
-    klient_wartosci['capacity'] = klient_wartosci['capacity'].fillna(n)
-    WSP_UTR_PTN = 0.5
-    PRZ_LICZBA_WIZYT_ROK = 36
-    HORYZONT = 1
-    UTRACONY_POTENCJAL = WSP_UTR_PTN * PRZ_LICZBA_WIZYT_ROK * HORYZONT * WARTOSC_ZAKUPOW_SR
-    LAMBDA = 100
-    K = 3
-    klienci_obsluzeni = 0
-    numer_w_kolejce = 0
-    liczba_klientow = round(random.normalvariate(SR_LICZBA_KLIENTOW, ODCH_LICZBA_KLIENTOW))
+        # Resetowanie zmiennych
+        klienci_obsluzeni = 0
+        numer_w_kolejce = 0
+        liczba_klientow = round(random.normalvariate(SR_LICZBA_KLIENTOW, ODCH_LICZBA_KLIENTOW))
 
-print(klient_wartosci)
-print(zrodlo_wartosci)
-result = pd.concat([klient_wartosci, zrodlo_wartosci], axis=1)
-print(result)
+    result = pd.concat([klient_wartosci, zrodlo_wartosci], axis=1)
+    r1 = result.iloc[:,0:2].groupby("capacity").count()
+    r2 = result.iloc[:,1:7].groupby("capacity").mean()
+    r1r2 = r1.merge(r2, left_index = True, right_index = True)
+    ultimate_result = ultimate_result.append(r1r2)
+    
+    klient_wartosci = pd.DataFrame(columns=['id_klienta', 'capacity', 'oczekiwanie', 
+                                             'wartosc_zakupow', 'zwrot', 'czas_obslugi',
+                                             "utracony_potencjal"], dtype=np.float64)
+
+    zrodlo_wartosci = pd.DataFrame(columns=['start_czas', "numer_w_kolejce"], dtype=np.float64)
+
+ultimate_result['id_klienta'] = ultimate_result['id_klienta'].astype(np.int64)    
+ultimate_result.reset_index(drop=False, inplace=True)
+ultimate_result.rename(columns = {"index": "capacity"}, inplace = True)
+    
+
+s1 = ultimate_result.iloc[:,0:2].groupby("capacity").mean()
+s2 = ultimate_result.groupby("capacity").mean()
+summary = s1.merge(s2, left_index = True, right_index = True)
+summary.reset_index(drop=False, inplace=True)
+summary.rename(columns = {"index": "capacity"}, inplace = True)
+
+
+
+
+
+
+
+
+
