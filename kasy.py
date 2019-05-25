@@ -21,6 +21,8 @@ import simpy
 import scipy.stats
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 ST_CZAS_OBSLUGI = 10
 SZYBKOSC_OBSLUGI = 1 / 20
@@ -130,7 +132,7 @@ random.seed(RANDOM_SEED)
 env = simpy.Environment()
 ultimate_result = pd.DataFrame(columns=['id_klienta', 'oczekiwanie', 'wartosc_zakupow', 
                                         'zwrot', 'czas_obslugi', 'utracony_potencjal'])
-for i in range(10):
+for i in range(2):
     for n in range(1, 11, 1):
         # Uruchomienie symulacji
         kasa = simpy.Resource(env, capacity=n)
@@ -164,10 +166,68 @@ s1 = ultimate_result.iloc[:,0:2].groupby("capacity").mean()
 s2 = ultimate_result.groupby("capacity").mean()
 summary = s1.merge(s2, left_index = True, right_index = True)
 summary.reset_index(drop=False, inplace=True)
-summary.rename(columns = {"index": "capacity"}, inplace = True)
+summary.rename(columns = {"index": "capacity", "id_klienta_x": "id_klienta"}, inplace = True)
+summary.drop(columns="id_klienta_y", inplace=True)
 
 
+# Wykresy 
 
+# Do not invoke separate window for charts
+# %matplotlib inline
+
+# Populate 0 columns with random integers 
+#summary['oczekiwanie'] = np.random.random_integers(1,20,10)
+#summary['utracony_potencjal'] = np.random.random_integers(1,20,10)
+#ultimate_result['oczekiwanie'] = np.random.random_integers(1,20,20)
+#ultimate_result['utracony_potencjal'] = np.random.random_integers(1,20,20)
+
+cols = summary.iloc[:,1:].columns
+for i in cols:
+    fig, ax = plt.subplots(1,1)
+    ax.hist(summary[i], color="blue", edgecolor="black", label=i)
+    ax.set_xlabel(i)
+    ax.set_ylabel("count")
+    ax.set_title("Histogram dla zmiennej {}".format(i))
+    
+for i in cols:
+    fig, ax = plt.subplots(1,1)
+    ax.hist(summary[i], color="blue", edgecolor="black", label=i, cumulative=True, density=True)
+    ax.set_xlabel(i)
+    ax.set_ylabel("count")
+    ax.set_title("CDF dla zmiennej {}".format(i))
+
+for i in cols[[1,3,4,5]]:
+    sns.lmplot('capacity', i, data=summary)
+    plt.xlabel('capacity')
+    plt.ylabel(i)
+    plt.title("Zaleznosc {} od {}".format(i,'capacity'))
+    
+    
+plt.clf()
+df_corr = summary.iloc[:,[0,2,4,5,6]].corr(method='spearman')
+sns.heatmap(df_corr)
+plt.title("Macierz korelacji")
+
+# Wykresy dla ultimate_results
+for i in cols[[1,3,4,5]]:
+    fig, ax = plt.subplots(1,1)
+    sns.boxplot(x='capacity', y=i, data=ultimate_result, orient='v', ax=ax)
+    plt.xlabel('capacity')
+    plt.ylabel(i)
+    plt.title("Wykres pudełkowy dla {} z podziałem na {}".format(i,'capacity'))
+    
+for i in cols[[1,3,4,5]]:
+    fig, ax = plt.subplots(1,1)
+    sns.swarmplot(x='capacity', y=i, data=ultimate_result, orient='v', ax=ax)
+    plt.xlabel('capacity')
+    plt.ylabel(i)
+    plt.title("Obserwacje dla {} z podziałem na {}".format(i,'capacity'))
+    
+for i in cols[[1,3,4,5]]:
+    sns.lmplot('oczekiwanie', "utracony_potencjal", data=ultimate_result)
+    plt.xlabel('oczekiwanie')
+    plt.ylabel("utracony_potencjal")
+    plt.title("Zaleznosc oczekiwanie od utracony_potencjal")
 
 
 
